@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keymimic"
+version = "0.1.0"
+description = "Windows desktop utility for human-like clipboard typing."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pyinstaller>=6.7",
+]
+
+[project.scripts]
+keymimic = "keymimic.app:main"
+
+[project.gui-scripts]
+keymimic-gui = "keymimic.app:main"
+
+[tool.setuptools.packages.find]
+include = ["keymimic*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
