@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCheckBox,
+    QApplication,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -148,7 +149,7 @@ class MainWindow(QMainWindow):
         self.countdown_spin.setRange(0, 30)
         self.countdown_spin.setSuffix(" s")
         self.tooltips_check = QCheckBox("Enable status tooltips")
-        self.tray_check = QCheckBox("Minimize to tray on close")
+        self.tray_check = QCheckBox("Show tray icon while running")
         self.start_minimized_check = QCheckBox("Start minimized")
         self.log_level_combo = QComboBox()
         self.log_level_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
@@ -214,7 +215,10 @@ class MainWindow(QMainWindow):
             if reason == QSystemTrayIcon.ActivationReason.Trigger
             else None
         )
-        self.tray.show()
+        if self.config.minimize_to_tray:
+            self.tray.show()
+        else:
+            self.tray.hide()
 
     def _profile_controls(self) -> list[QWidget]:
         return (
@@ -421,6 +425,8 @@ class MainWindow(QMainWindow):
         self.config.minimize_to_tray = self.tray_check.isChecked()
         self.config.start_minimized = self.start_minimized_check.isChecked()
         self.config.log_level = self.log_level_combo.currentText()
+        if hasattr(self, "tray"):
+            self.tray.setVisible(self.config.minimize_to_tray)
         self._save_config_quietly()
         self.status_widget.set_idle("Settings saved")
 
@@ -630,11 +636,10 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._save_general_settings()
         self._save_config_quietly()
-        if self.config.minimize_to_tray and self.tray.isVisible():
-            event.ignore()
-            self.hide()
-            return
         self.engine.cancel()
         self.hotkeys.stop()
         self.tray.hide()
         event.accept()
+        app = QApplication.instance()
+        if app is not None:
+            QTimer.singleShot(0, app.quit)
