@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
         names = list(self.config.profile_order)
         self.profile_sidebar.set_profiles(names, self.current_profile_name)
         self.hotkeys_panel.set_hotkeys(self.config.hotkeys)
+        self.status_widget.set_hotkeys(self.config.hotkeys)
         self._load_general_settings()
 
     def _on_profile_selected(self, name: str) -> None:
@@ -435,11 +436,13 @@ class MainWindow(QMainWindow):
         self.config.hotkeys = settings
         try:
             self._apply_hotkey_registrations(active_typing=self._typing_hotkeys_active)
+            self.status_widget.set_hotkeys(self.config.hotkeys)
             self._save_config_quietly()
             self.hotkeys_panel.set_status("Hotkeys saved and registered.", ok=True)
         except HotkeyError as exc:
             self.config.hotkeys = old
             self._apply_hotkey_registrations(active_typing=self._typing_hotkeys_active)
+            self.status_widget.set_hotkeys(old)
             self.hotkeys_panel.set_hotkeys(old)
             self.hotkeys_panel.set_status(str(exc), ok=False)
 
