@@ -96,12 +96,54 @@ class TypingProfile:
         return profile
 
 
-@dataclass
+DEFAULT_START_PAUSE_HOTKEY = "Ctrl+Shift+Alt+V"
+DEFAULT_STOP_HOTKEY = "Esc"
+DEFAULT_SHOW_HIDE_HOTKEY = "Ctrl+Shift+Alt+K"
+_UNSET = object()
+
+
+@dataclass(init=False)
 class HotkeySettings:
-    start_typing: str = "Ctrl+Shift+Alt+V"
-    pause_resume_typing: str = "Ctrl+Shift+Alt+P"
-    stop_typing: str = "Esc"
-    show_hide_window: str = "Ctrl+Shift+Alt+K"
+    start_pause_typing: str = DEFAULT_START_PAUSE_HOTKEY
+    stop_typing: str = DEFAULT_STOP_HOTKEY
+    show_hide_window: str = DEFAULT_SHOW_HIDE_HOTKEY
+
+    def __init__(
+        self,
+        start_pause_typing: str | object = _UNSET,
+        stop_typing: str = DEFAULT_STOP_HOTKEY,
+        show_hide_window: str = DEFAULT_SHOW_HIDE_HOTKEY,
+        *,
+        start_typing: str | object = _UNSET,
+        pause_resume_typing: str | object = _UNSET,
+    ) -> None:
+        if start_pause_typing is _UNSET:
+            if start_typing is not _UNSET:
+                start_pause_typing = start_typing
+            elif pause_resume_typing is not _UNSET:
+                start_pause_typing = pause_resume_typing
+            else:
+                start_pause_typing = DEFAULT_START_PAUSE_HOTKEY
+
+        self.start_pause_typing = str(start_pause_typing)
+        self.stop_typing = str(stop_typing)
+        self.show_hide_window = str(show_hide_window)
+
+    @property
+    def start_typing(self) -> str:
+        return self.start_pause_typing
+
+    @start_typing.setter
+    def start_typing(self, value: str) -> None:
+        self.start_pause_typing = value
+
+    @property
+    def pause_resume_typing(self) -> str:
+        return self.start_pause_typing
+
+    @pause_resume_typing.setter
+    def pause_resume_typing(self, value: str) -> None:
+        self.start_pause_typing = value
 
     def validate(self) -> None:
         from .hotkeys import validate_hotkey_settings
@@ -112,8 +154,7 @@ class HotkeySettings:
         from .hotkeys import normalize_hotkey
 
         return HotkeySettings(
-            start_typing=normalize_hotkey(self.start_typing),
-            pause_resume_typing=normalize_hotkey(self.pause_resume_typing),
+            start_pause_typing=normalize_hotkey(self.start_pause_typing),
             stop_typing=normalize_hotkey(self.stop_typing),
             show_hide_window=normalize_hotkey(self.show_hide_window),
         )
@@ -126,14 +167,19 @@ class HotkeySettings:
         if not data:
             settings = cls()
         else:
+            if "start_pause_typing" in data:
+                start_pause_typing = str(data.get("start_pause_typing", ""))
+            elif "start_typing" in data:
+                start_pause_typing = str(data.get("start_typing", ""))
+            elif "pause_resume_typing" in data:
+                start_pause_typing = str(data.get("pause_resume_typing", ""))
+            else:
+                start_pause_typing = DEFAULT_START_PAUSE_HOTKEY
             settings = cls(
-                start_typing=str(data.get("start_typing", cls.start_typing)),
-                pause_resume_typing=str(
-                    data.get("pause_resume_typing", cls.pause_resume_typing)
-                ),
-                stop_typing=str(data.get("stop_typing", cls.stop_typing)),
+                start_pause_typing=start_pause_typing,
+                stop_typing=str(data.get("stop_typing", DEFAULT_STOP_HOTKEY)),
                 show_hide_window=str(
-                    data.get("show_hide_window", cls.show_hide_window)
+                    data.get("show_hide_window", DEFAULT_SHOW_HIDE_HOTKEY)
                 ),
             )
         normalized = settings.normalized()

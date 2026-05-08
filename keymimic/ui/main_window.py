@@ -180,8 +180,7 @@ class MainWindow(QMainWindow):
         self.hotkeys_panel.save_requested.connect(self._save_hotkeys)
         self.hotkeys_panel.reset_requested.connect(self._reset_hotkeys)
         self.save_settings_button.clicked.connect(self._save_general_settings)
-        self.status_widget.start_requested.connect(self._start_typing)
-        self.status_widget.pause_requested.connect(self._toggle_pause)
+        self.status_widget.start_pause_requested.connect(self._start_or_toggle_pause)
         self.status_widget.stop_requested.connect(self._stop_typing)
         self.engine_event_received.connect(self._on_engine_event)
         self.hotkey_triggered.connect(self._on_hotkey_triggered)
@@ -452,11 +451,10 @@ class MainWindow(QMainWindow):
     def _active_hotkey_bindings(self, *, active_typing: bool) -> dict[str, str]:
         hotkeys = self.config.hotkeys.normalized()
         bindings = {
-            "start_typing": hotkeys.start_typing,
+            "start_pause_typing": hotkeys.start_pause_typing,
             "show_hide_window": hotkeys.show_hide_window,
         }
         if active_typing:
-            bindings["pause_resume_typing"] = hotkeys.pause_resume_typing
             bindings["stop_typing"] = hotkeys.stop_typing
         return bindings
 
@@ -556,6 +554,12 @@ class MainWindow(QMainWindow):
             self._apply_hotkey_registrations(active_typing=False)
             QMessageBox.warning(self, "Could not start typing", str(exc))
 
+    def _start_or_toggle_pause(self) -> None:
+        if self.engine.is_running():
+            self._toggle_pause()
+        else:
+            self._start_typing()
+
     def _toggle_pause(self) -> None:
         if not self.engine.is_running():
             return
@@ -603,10 +607,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Typing failed", str(payload.get("error", "")))
 
     def _on_hotkey_triggered(self, action: str) -> None:
-        if action == "start_typing":
-            self._start_typing()
-        elif action == "pause_resume_typing":
-            self._toggle_pause()
+        if action in {"start_pause_typing", "start_typing", "pause_resume_typing"}:
+            self._start_or_toggle_pause()
         elif action == "stop_typing":
             self._stop_typing()
         elif action == "show_hide_window":

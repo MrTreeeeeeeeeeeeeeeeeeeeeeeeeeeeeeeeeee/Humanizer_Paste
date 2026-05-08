@@ -204,8 +204,7 @@ def normalize_hotkey(value: str, *, required: bool = False) -> str:
 
 def validate_hotkey_settings(settings: object) -> None:
     fields = {
-        "start_typing": False,
-        "pause_resume_typing": False,
+        "start_pause_typing": False,
         "stop_typing": True,
         "show_hide_window": False,
     }
