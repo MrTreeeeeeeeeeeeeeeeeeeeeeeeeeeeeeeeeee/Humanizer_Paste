@@ -32,13 +32,11 @@ class HotkeysPanel(QWidget):
 
         form = QFormLayout()
         form.setLabelAlignment(form.labelAlignment())
-        self.start_edit = QKeySequenceEdit()
-        self.pause_edit = QKeySequenceEdit()
+        self.start_pause_edit = QKeySequenceEdit()
         self.stop_edit = QKeySequenceEdit()
         self.show_edit = QKeySequenceEdit()
 
-        form.addRow("Start typing from clipboard", self.start_edit)
-        form.addRow("Pause / resume typing", self.pause_edit)
+        form.addRow("Start / pause / resume typing", self.start_pause_edit)
         form.addRow("Stop typing immediately", self.stop_edit)
         form.addRow("Show / hide window", self.show_edit)
         layout.addLayout(form)
@@ -57,16 +55,14 @@ class HotkeysPanel(QWidget):
         self.reset_button.clicked.connect(self.reset_requested.emit)
 
     def set_hotkeys(self, hotkeys: HotkeySettings) -> None:
-        self.start_edit.setKeySequence(QKeySequence(hotkeys.start_typing))
-        self.pause_edit.setKeySequence(QKeySequence(hotkeys.pause_resume_typing))
+        self.start_pause_edit.setKeySequence(QKeySequence(hotkeys.start_pause_typing))
         self.stop_edit.setKeySequence(QKeySequence(hotkeys.stop_typing))
         self.show_edit.setKeySequence(QKeySequence(hotkeys.show_hide_window))
         self.set_status("Hotkeys loaded.", ok=True)
 
     def settings(self) -> HotkeySettings:
         return HotkeySettings(
-            start_typing=self._sequence_text(self.start_edit),
-            pause_resume_typing=self._sequence_text(self.pause_edit),
+            start_pause_typing=self._sequence_text(self.start_pause_edit),
             stop_typing=self._sequence_text(self.stop_edit),
             show_hide_window=self._sequence_text(self.show_edit),
         ).normalized()

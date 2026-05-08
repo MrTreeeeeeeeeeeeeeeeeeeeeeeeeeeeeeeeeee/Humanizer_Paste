@@ -95,8 +95,7 @@ def migrate_ini_config(path: Path) -> AppConfig:
         last_profile=last_profile,
         profiles=dict(profiles),
         hotkeys=HotkeySettings(
-            start_typing=normalize_hotkey(hotkey, required=True),
-            pause_resume_typing="Ctrl+Shift+Alt+P",
+            start_pause_typing=normalize_hotkey(hotkey, required=True),
             stop_typing="Esc",
             show_hide_window="Ctrl+Shift+Alt+K",
         ),

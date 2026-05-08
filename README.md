@@ -41,8 +41,7 @@ Saved settings include:
 ## Default Hotkeys
 
 ```text
-Start typing from clipboard      Ctrl+Shift+Alt+V
-Pause / resume typing            Ctrl+Shift+Alt+P
+Start / pause / resume typing    Ctrl+Shift+Alt+V
 Stop typing immediately          Esc
 Show / hide KeyMimic window      Ctrl+Shift+Alt+K
 ```

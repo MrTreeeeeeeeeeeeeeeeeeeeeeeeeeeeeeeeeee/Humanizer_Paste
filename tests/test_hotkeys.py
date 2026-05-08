@@ -27,9 +27,8 @@ def test_parse_rejects_invalid_hotkey_strings():
 
 def test_duplicate_hotkeys_are_rejected():
     settings = HotkeySettings(
-        start_typing="Ctrl+Shift+Alt+V",
-        pause_resume_typing="Ctrl+Shift+Alt+V",
-        stop_typing="Esc",
+        start_pause_typing="Ctrl+Shift+Alt+V",
+        stop_typing="Ctrl+Shift+Alt+V",
         show_hide_window="Ctrl+Shift+Alt+K",
     )
 
@@ -39,8 +38,7 @@ def test_duplicate_hotkeys_are_rejected():
 
 def test_stop_hotkey_is_required():
     settings = HotkeySettings(
-        start_typing="Ctrl+Shift+Alt+V",
-        pause_resume_typing="",
+        start_pause_typing="Ctrl+Shift+Alt+V",
         stop_typing="",
         show_hide_window="",
     )
