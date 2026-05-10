@@ -1,9 +1,9 @@
 # KeyMimic
 
 KeyMimic is a Windows desktop utility that types clipboard text with configurable
-human-like timing. This Python rewrite keeps the original AutoHotkey workflow
-and adds a native UI, JSON settings, configurable hotkeys, profile management,
-pause/resume, import/export, and a background typing engine.
+human-like timing. It uses a native Python UI, JSON settings, configurable
+hotkeys, profile management, pause/resume, import/export, and a background
+typing engine. No separate scripting runtime is required.
 
 ## Requirements
 
@@ -26,9 +26,6 @@ Settings are stored in:
 ```text
 %APPDATA%\KeyMimic\config.json
 ```
-
-On first launch, the app migrates `Humanizer_paste_Settings.ini` if it exists in
-the current working directory. The original INI file is left unchanged.
 
 Saved settings include:
 

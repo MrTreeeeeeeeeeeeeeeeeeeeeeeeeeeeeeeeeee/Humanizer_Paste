@@ -119,28 +119,6 @@ class ParsedHotkey:
     vk: int
 
 
-def _convert_ahk_hotkey(value: str) -> str:
-    value = value.strip()
-    if not value:
-        return ""
-    modifiers: list[str] = []
-    while value and value[0] in "^+!#":
-        token = value[0]
-        value = value[1:]
-        if token == "^":
-            modifiers.append("Ctrl")
-        elif token == "+":
-            modifiers.append("Shift")
-        elif token == "!":
-            modifiers.append("Alt")
-        elif token == "#":
-            modifiers.append("Win")
-    if not modifiers:
-        return value
-    key = value.upper() if len(value) == 1 and value.isalpha() else value
-    return "+".join(modifiers + [key])
-
-
 def _display_key(token: str) -> str:
     stripped = token.strip()
     upper = stripped.upper()
@@ -160,13 +138,12 @@ def _display_key(token: str) -> str:
 
 
 def parse_hotkey(value: str, *, required: bool = True) -> ParsedHotkey | None:
-    converted = _convert_ahk_hotkey(value)
-    if not converted.strip():
+    if not value.strip():
         if required:
             raise HotkeyParseError("Hotkey is required")
         return None
 
-    parts = [part.strip() for part in converted.replace(" ", "").split("+") if part]
+    parts = [part.strip() for part in value.replace(" ", "").split("+") if part]
     if not parts:
         if required:
             raise HotkeyParseError("Hotkey is required")

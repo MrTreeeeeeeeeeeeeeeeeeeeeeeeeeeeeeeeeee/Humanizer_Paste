@@ -607,7 +607,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Typing failed", str(payload.get("error", "")))
 
     def _on_hotkey_triggered(self, action: str) -> None:
-        if action in {"start_pause_typing", "start_typing", "pause_resume_typing"}:
+        if action == "start_pause_typing":
             self._start_or_toggle_pause()
         elif action == "stop_typing":
             self._stop_typing()

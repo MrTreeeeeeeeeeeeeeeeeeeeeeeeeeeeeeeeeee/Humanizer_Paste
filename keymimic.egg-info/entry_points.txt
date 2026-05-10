@@ -1,5 +1,0 @@
-[console_scripts]
-keymimic = keymimic.app:main
-
-[gui_scripts]
-keymimic-gui = keymimic.app:main
