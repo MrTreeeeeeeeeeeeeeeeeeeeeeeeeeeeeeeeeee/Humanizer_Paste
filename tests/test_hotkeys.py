@@ -14,7 +14,6 @@ from keymimic.models import HotkeySettings
 
 def test_normalizes_user_friendly_hotkeys():
     assert normalize_hotkey("Ctrl+Alt+Shift+v") == "Ctrl+Shift+Alt+V"
-    assert normalize_hotkey("+^!v") == "Ctrl+Shift+Alt+V"
     assert normalize_hotkey("escape") == "Esc"
 
 
@@ -23,6 +22,11 @@ def test_parse_rejects_invalid_hotkey_strings():
         parse_hotkey("Ctrl+Shift")
     with pytest.raises(HotkeyParseError):
         parse_hotkey("Ctrl+A+B")
+
+
+def test_symbolic_hotkey_shorthand_is_rejected():
+    with pytest.raises(HotkeyParseError):
+        parse_hotkey("+" + "^!v")
 
 
 def test_duplicate_hotkeys_are_rejected():
