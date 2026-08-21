@@ -5,6 +5,11 @@ human-like timing. It uses a native Python UI, JSON settings, configurable
 hotkeys, profile management, pause/resume, import/export, and a background
 typing engine. No separate scripting runtime is required.
 
+## Start KeyMimic
+
+Double-click **Start KeyMimic.cmd** in this folder. No terminal commands or
+Python setup are needed for the included Windows build.
+
 ## Requirements
 
 - Windows 10 or newer
