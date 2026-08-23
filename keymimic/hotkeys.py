@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import platform
 import queue
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 
 class HotkeyError(RuntimeError):
@@ -168,7 +171,9 @@ def parse_hotkey(value: str, *, required: bool = True) -> ParsedHotkey | None:
     modifier_flags = 0
     for modifier in modifiers:
         modifier_flags |= MODIFIER_FLAGS[modifier]
-    display_order = [name for name in ("Ctrl", "Shift", "Alt", "Win") if name in modifiers]
+    display_order = [
+        name for name in ("Ctrl", "Shift", "Alt", "Win") if name in modifiers
+    ]
     display = "+".join(display_order + [key])
     vk = KEY_CODES[key]
     return ParsedHotkey(display=display, modifiers=modifier_flags, vk=vk)
@@ -188,9 +193,14 @@ def validate_hotkey_settings(settings: object) -> None:
     seen: dict[str, str] = {}
     for field_name, required in fields.items():
         value = getattr(settings, field_name)
-        normalized = normalize_hotkey(value, required=required)
+        parsed = parse_hotkey(value, required=required)
+        normalized = "" if parsed is None else parsed.display
         if not normalized:
             continue
+        if field_name != "stop_typing" and parsed is not None and parsed.modifiers == 0:
+            raise HotkeyParseError(
+                f"{field_name} must include Ctrl, Shift, Alt, or Win"
+            )
         duplicate = seen.get(normalized.casefold())
         if duplicate:
             raise HotkeyParseError(
@@ -209,10 +219,7 @@ def _is_windows() -> bool:
     return platform.system() == "Windows"
 
 
-if _is_windows():
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-else:
-    user32 = None
+user32 = ctypes.WinDLL("user32", use_last_error=True) if _is_windows() else None
 
 
 class MSG(ctypes.Structure):
@@ -300,10 +307,7 @@ class GlobalHotkeyManager:
                     for action, hotkey in bindings.items()
                     if normalize_hotkey(hotkey)
                 }
-            return {
-                action: "Unavailable on this platform"
-                for action in self._bindings
-            }
+            return {action: "Unavailable on this platform" for action in self._bindings}
 
         normalized = {
             action: normalize_hotkey(hotkey)
@@ -330,11 +334,18 @@ class GlobalHotkeyManager:
         with self._lock:
             thread = self._thread
             thread_id = self._thread_id
-            self._thread = None
-            self._thread_id = None
         if thread and thread.is_alive() and thread_id and user32 is not None:
-            user32.PostThreadMessageW(thread_id, WM_QUIT, 0, 0)
+            if not user32.PostThreadMessageW(thread_id, WM_QUIT, 0, 0):
+                raise HotkeyError(
+                    f"Could not stop hotkey worker ({ctypes.get_last_error()})"
+                )
             thread.join(timeout=2.0)
+            if thread.is_alive():
+                raise HotkeyError("Timed out while stopping hotkey worker")
+        with self._lock:
+            if self._thread is thread:
+                self._thread = None
+                self._thread_id = None
 
     def _start_thread(self, bindings: dict[str, str]) -> dict[str, str]:
         ready: queue.Queue[tuple[bool, dict[str, str], int | None]] = queue.Queue()
@@ -370,6 +381,7 @@ class GlobalHotkeyManager:
             return
 
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentThreadId.restype = ctypes.c_uint
         thread_id = kernel32.GetCurrentThreadId()
         id_to_action: dict[int, str] = {}
         statuses: dict[str, str] = {}
@@ -395,11 +407,28 @@ class GlobalHotkeyManager:
             return
 
         ready.put((True, statuses, thread_id))
-        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-            if msg.message == WM_HOTKEY:
-                action = id_to_action.get(int(msg.wParam))
-                if action and callback:
-                    callback(action)
-
-        for hotkey_id in id_to_action:
-            user32.UnregisterHotKey(None, hotkey_id)
+        try:
+            while True:
+                result = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+                if result == 0:
+                    break
+                if result < 0:
+                    logger.error("GetMessageW failed: %s", ctypes.get_last_error())
+                    break
+                if msg.message == WM_HOTKEY:
+                    callback_action = id_to_action.get(int(msg.wParam))
+                    if callback_action and callback:
+                        try:
+                            callback(callback_action)
+                        except Exception:
+                            logger.exception(
+                                "Hotkey callback failed for %s", callback_action
+                            )
+        finally:
+            for hotkey_id in id_to_action:
+                if not user32.UnregisterHotKey(None, hotkey_id):
+                    logger.warning(
+                        "Could not unregister hotkey %s: %s",
+                        hotkey_id,
+                        ctypes.get_last_error(),
+                    )

@@ -3,10 +3,12 @@ from __future__ import annotations
 import ctypes
 import platform
 import random
+import sys
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-
+from typing import Any
 
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
@@ -27,6 +29,8 @@ def is_windows() -> bool:
     return platform.system() == "Windows"
 
 
+user32: Any
+winmm: Any
 if is_windows():
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     winmm = ctypes.WinDLL("winmm", use_last_error=True)
@@ -35,7 +39,9 @@ else:
     winmm = None
 
 
-ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+ULONG_PTR = (
+    ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+)
 
 
 class KEYBDINPUT(ctypes.Structure):
@@ -82,6 +88,25 @@ class INPUT(ctypes.Structure):
     ]
 
 
+if user32 is not None:
+    user32.SendInput.argtypes = [ctypes.c_uint, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = ctypes.c_uint
+    user32.VkKeyScanW.argtypes = [ctypes.c_wchar]
+    user32.VkKeyScanW.restype = ctypes.c_short
+    user32.MapVirtualKeyW.argtypes = [ctypes.c_uint, ctypes.c_uint]
+    user32.MapVirtualKeyW.restype = ctypes.c_uint
+    user32.GetForegroundWindow.restype = ctypes.c_void_p
+    user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+if winmm is not None:
+    winmm.timeBeginPeriod.argtypes = [ctypes.c_uint]
+    winmm.timeBeginPeriod.restype = ctypes.c_uint
+    winmm.timeEndPeriod.argtypes = [ctypes.c_uint]
+    winmm.timeEndPeriod.restype = ctypes.c_uint
+
+
 @dataclass(frozen=True)
 class ScanInfo:
     vk: int
@@ -91,8 +116,13 @@ class ScanInfo:
 
 
 class WindowsInput:
-    def __init__(self, hold_jitter_ms: int = 10) -> None:
+    def __init__(
+        self,
+        hold_jitter_ms: int = 10,
+        rng: random.Random | None = None,
+    ) -> None:
         self.hold_jitter_ms = hold_jitter_ms
+        self._rng = rng or random.Random()
 
     @property
     def available(self) -> bool:
@@ -100,7 +130,7 @@ class WindowsInput:
 
     def send_scan_input(self, scan_code: int, flags: int = 0) -> None:
         if user32 is None:
-            return
+            raise RuntimeError("Windows input injection is unavailable")
         input_struct = INPUT(
             type=INPUT_KEYBOARD,
             union=INPUT_UNION(
@@ -130,18 +160,23 @@ class WindowsInput:
         is_extended: bool = False,
     ) -> None:
         extended = KEYEVENTF_EXTENDEDKEY if is_extended else 0
-        self.send_scan_input(scan_code, extended)
-        actual_hold = hold_time_ms + random.randint(
-            -self.hold_jitter_ms,
-            self.hold_jitter_ms,
-        )
-        time.sleep(max(0.005, actual_hold / 1000.0))
-        self.send_scan_input(scan_code, extended | KEYEVENTF_KEYUP)
+        pressed = False
+        try:
+            self.send_scan_input(scan_code, extended)
+            pressed = True
+            actual_hold = hold_time_ms + self._rng.randint(
+                -self.hold_jitter_ms,
+                self.hold_jitter_ms,
+            )
+            time.sleep(max(0.005, actual_hold / 1000.0))
+        finally:
+            if pressed:
+                self.send_scan_input(scan_code, extended | KEYEVENTF_KEYUP)
 
     def char_to_scan_info(self, char: str) -> ScanInfo | None:
         if user32 is None:
             return None
-        result = ctypes.c_short(user32.VkKeyScanW(ord(char))).value
+        result = ctypes.c_short(user32.VkKeyScanW(char)).value
         if result == -1:
             return None
         vk = result & 0xFF
@@ -157,6 +192,8 @@ class WindowsInput:
         )
 
     def send_char(self, char: str, hold_time_ms: int) -> None:
+        if len(char) != 1:
+            raise ValueError("send_char requires exactly one character")
         if char == "\r":
             return
         if char == "\n":
@@ -174,25 +211,30 @@ class WindowsInput:
             self.send_unicode_char(char)
             return
 
-        if info.need_ctrl_alt:
-            self.send_scan_input(SC_LCTRL)
-            time.sleep(random.uniform(0.005, 0.015))
-            self.send_scan_input(SC_LALT)
-            time.sleep(random.uniform(0.005, 0.015))
-        if info.need_shift:
-            self.send_scan_input(SC_LSHIFT)
-            time.sleep(random.uniform(0.005, 0.015))
+        held_modifiers: list[int] = []
+        try:
+            if info.need_ctrl_alt:
+                self._press_modifier(SC_LCTRL, held_modifiers)
+                self._press_modifier(SC_LALT, held_modifiers)
+            if info.need_shift:
+                self._press_modifier(SC_LSHIFT, held_modifiers)
+            self.press_key_scan(info.scan, hold_time_ms)
+        finally:
+            release_error: OSError | None = None
+            original_error_active = sys.exc_info()[0] is not None
+            for scan_code in reversed(held_modifiers):
+                time.sleep(self._rng.uniform(0.005, 0.015))
+                try:
+                    self.send_scan_input(scan_code, KEYEVENTF_KEYUP)
+                except OSError as exc:
+                    release_error = release_error or exc
+            if release_error is not None and not original_error_active:
+                raise release_error
 
-        self.press_key_scan(info.scan, hold_time_ms)
-
-        if info.need_shift:
-            time.sleep(random.uniform(0.005, 0.015))
-            self.send_scan_input(SC_LSHIFT, KEYEVENTF_KEYUP)
-        if info.need_ctrl_alt:
-            time.sleep(random.uniform(0.005, 0.015))
-            self.send_scan_input(SC_LALT, KEYEVENTF_KEYUP)
-            time.sleep(random.uniform(0.005, 0.015))
-            self.send_scan_input(SC_LCTRL, KEYEVENTF_KEYUP)
+    def _press_modifier(self, scan_code: int, held_modifiers: list[int]) -> None:
+        self.send_scan_input(scan_code)
+        held_modifiers.append(scan_code)
+        time.sleep(self._rng.uniform(0.005, 0.015))
 
     def send_unicode_char(self, char: str) -> None:
         if user32 is None:
@@ -227,13 +269,35 @@ class WindowsInput:
     def press_backspace(self, hold_time_ms: int) -> None:
         self.press_key_scan(SC_BACKSPACE, hold_time_ms)
 
+    def foreground_window(self) -> int | None:
+        if user32 is None:
+            return None
+        handle = user32.GetForegroundWindow()
+        return int(handle) if handle else None
+
+    def foreground_window_title(self) -> str:
+        if user32 is None:
+            return ""
+        handle = user32.GetForegroundWindow()
+        if not handle:
+            return ""
+        length = user32.GetWindowTextLengthW(handle)
+        if length <= 0:
+            return "Unknown window"
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(handle, buffer, len(buffer))
+        return buffer.value or "Unknown window"
+
 
 @contextmanager
-def high_resolution_timer():
+def high_resolution_timer() -> Iterator[None]:
     if winmm is None:
         yield
         return
-    winmm.timeBeginPeriod(1)
+    result = winmm.timeBeginPeriod(1)
+    if result != 0:
+        yield
+        return
     try:
         yield
     finally:

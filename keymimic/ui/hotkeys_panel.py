@@ -5,11 +5,11 @@ from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QKeySequenceEdit,
 )
 
 from ..hotkeys import HotkeyParseError, normalize_hotkey
@@ -85,7 +85,7 @@ class HotkeysPanel(QWidget):
     @staticmethod
     def _sequence_text(edit: QKeySequenceEdit) -> str:
         sequence = edit.keySequence()
-        value = sequence.toString(QKeySequence.PortableText)
+        value = sequence.toString(QKeySequence.SequenceFormat.PortableText)
         if not value:
             return ""
         return normalize_hotkey(value)

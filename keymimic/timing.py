@@ -49,8 +49,12 @@ def human_delay_seconds(
 def estimate_speed(profile: TypingProfile) -> SpeedEstimate:
     profile.validate()
     hold_seconds = profile.hold_time_ms / 1000.0
-    min_delay = clamp_delay(profile.base_delay_seconds - profile.delay_variation_seconds)
-    max_delay = clamp_delay(profile.base_delay_seconds + profile.delay_variation_seconds)
+    min_delay = clamp_delay(
+        profile.base_delay_seconds - profile.delay_variation_seconds
+    )
+    max_delay = clamp_delay(
+        profile.base_delay_seconds + profile.delay_variation_seconds
+    )
 
     seconds_per_character = hold_seconds + profile.base_delay_seconds
     seconds_per_character_min = hold_seconds + min_delay
@@ -62,9 +66,7 @@ def estimate_speed(profile: TypingProfile) -> SpeedEstimate:
     wpm_max = round((60 / seconds_per_character_min) / 5)
 
     average_pause = (profile.pause_min_seconds + profile.pause_max_seconds) / 2.0
-    seconds_with_pauses = seconds_per_character + (
-        profile.pause_chance * average_pause
-    )
+    seconds_with_pauses = seconds_per_character + (profile.pause_chance * average_pause)
     wpm_with_pauses = round((60 / seconds_with_pauses) / 5)
 
     return SpeedEstimate(

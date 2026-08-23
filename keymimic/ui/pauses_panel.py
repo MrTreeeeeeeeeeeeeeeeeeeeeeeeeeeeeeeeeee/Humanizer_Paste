@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDoubleSpinBox, QFormLayout, QGroupBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class PausesPanel(QWidget):

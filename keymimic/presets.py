@@ -5,8 +5,8 @@ from collections import OrderedDict
 from .models import TypingProfile
 
 
-def built_in_profiles() -> "OrderedDict[str, TypingProfile]":
-    profiles: "OrderedDict[str, TypingProfile]" = OrderedDict()
+def built_in_profiles() -> OrderedDict[str, TypingProfile]:
+    profiles: OrderedDict[str, TypingProfile] = OrderedDict()
     profiles["Human"] = TypingProfile(
         name="Human",
         description="Natural typist around 100 WPM",
@@ -21,6 +21,7 @@ def built_in_profiles() -> "OrderedDict[str, TypingProfile]":
         line_break_max_seconds=8.000,
         mistake_chance=0.060,
         is_builtin=True,
+        profile_id="builtin:human",
     )
     profiles["Super Human"] = TypingProfile(
         name="Super Human",
@@ -36,6 +37,7 @@ def built_in_profiles() -> "OrderedDict[str, TypingProfile]":
         line_break_max_seconds=4.000,
         mistake_chance=0.030,
         is_builtin=True,
+        profile_id="builtin:super-human",
     )
     profiles["Extreme Human"] = TypingProfile(
         name="Extreme Human",
@@ -51,6 +53,7 @@ def built_in_profiles() -> "OrderedDict[str, TypingProfile]":
         line_break_max_seconds=2.500,
         mistake_chance=0.015,
         is_builtin=True,
+        profile_id="builtin:extreme-human",
     )
     profiles["Super Extreme Human"] = TypingProfile(
         name="Super Extreme Human",
@@ -66,6 +69,7 @@ def built_in_profiles() -> "OrderedDict[str, TypingProfile]":
         line_break_max_seconds=1.500,
         mistake_chance=0.008,
         is_builtin=True,
+        profile_id="builtin:super-extreme-human",
     )
     return profiles
 
@@ -88,7 +92,7 @@ def default_custom_profile(name: str) -> TypingProfile:
     )
 
 
-def default_profiles() -> "OrderedDict[str, TypingProfile]":
+def default_profiles() -> OrderedDict[str, TypingProfile]:
     profiles = built_in_profiles()
     profiles["Custom 1"] = default_custom_profile("Custom 1")
     profiles["Custom 2"] = default_custom_profile("Custom 2")

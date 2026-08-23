@@ -1,74 +1,55 @@
 from __future__ import annotations
 
-import ctypes
-import platform
-from contextlib import contextmanager
+import logging
+from collections.abc import Callable
 
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QClipboard, QGuiApplication
 
-CF_UNICODETEXT = 13
-
-
-def _is_windows() -> bool:
-    return platform.system() == "Windows"
-
-
-if _is_windows():
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    user32.OpenClipboard.argtypes = [ctypes.c_void_p]
-    user32.OpenClipboard.restype = ctypes.c_bool
-    user32.CloseClipboard.restype = ctypes.c_bool
-    user32.GetClipboardData.argtypes = [ctypes.c_uint]
-    user32.GetClipboardData.restype = ctypes.c_void_p
-    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
-    kernel32.GlobalLock.restype = ctypes.c_void_p
-    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
-else:
-    user32 = None
-    kernel32 = None
-
-
-@contextmanager
-def _open_clipboard():
-    if user32 is None:
-        raise RuntimeError("Windows clipboard API is unavailable")
-    if not user32.OpenClipboard(None):
-        error = ctypes.get_last_error()
-        raise OSError(error, "OpenClipboard failed")
-    try:
-        yield
-    finally:
-        user32.CloseClipboard()
+logger = logging.getLogger(__name__)
 
 
 def get_clipboard_text() -> str:
-    if user32 is None or kernel32 is None:
-        return _get_clipboard_text_tk()
+    """Return clipboard text through Qt, which handles Windows clipboard retries."""
+    application = QGuiApplication.instance()
+    if application is None:
+        return ""
+    clipboard = QGuiApplication.clipboard()
+    mime_data = clipboard.mimeData(QClipboard.Mode.Clipboard)
+    if mime_data is None or not mime_data.hasText():
+        return ""
+    try:
+        return mime_data.text()
+    except RuntimeError:
+        logger.warning("Clipboard contents became unavailable while reading")
+        return ""
 
-    with _open_clipboard():
-        handle = user32.GetClipboardData(CF_UNICODETEXT)
-        if not handle:
-            return ""
-        pointer = kernel32.GlobalLock(handle)
-        if not pointer:
-            return ""
+
+class ClipboardService(QObject):
+    text_changed = Signal(str)
+
+    def __init__(self, reader: Callable[[], str] = get_clipboard_text) -> None:
+        super().__init__()
+        self._reader = reader
+        self._text = ""
+        self._clipboard = QGuiApplication.clipboard()
+        self._clipboard.dataChanged.connect(self.refresh)
+        self.refresh()
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    def snapshot(self) -> str:
+        self.refresh()
+        return self._text
+
+    def refresh(self) -> None:
         try:
-            return ctypes.wstring_at(pointer)
-        finally:
-            kernel32.GlobalUnlock(handle)
-
-
-def _get_clipboard_text_tk() -> str:
-    try:
-        import tkinter
-    except Exception:
-        return ""
-
-    root = tkinter.Tk()
-    root.withdraw()
-    try:
-        return root.clipboard_get()
-    except Exception:
-        return ""
-    finally:
-        root.destroy()
+            text = self._reader()
+        except (OSError, RuntimeError) as exc:
+            logger.warning("Clipboard read failed: %s", exc)
+            return
+        if text != self._text:
+            self._text = text
+            self.text_changed.emit(text)

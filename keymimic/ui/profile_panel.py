@@ -15,6 +15,7 @@ class ProfileSidebar(QWidget):
     profile_selected = Signal(str)
     add_requested = Signal()
     duplicate_requested = Signal()
+    delete_requested = Signal()
     import_requested = Signal()
     export_requested = Signal()
     move_up_requested = Signal()
@@ -38,6 +39,7 @@ class ProfileSidebar(QWidget):
 
         self.add_button = QPushButton("Add")
         self.duplicate_button = QPushButton("Duplicate")
+        self.delete_button = QPushButton("Delete")
         self.import_button = QPushButton("Import")
         self.export_button = QPushButton("Export")
         self.move_up_button = QPushButton("Move Up")
@@ -45,6 +47,7 @@ class ProfileSidebar(QWidget):
 
         self.add_button.clicked.connect(self.add_requested.emit)
         self.duplicate_button.clicked.connect(self.duplicate_requested.emit)
+        self.delete_button.clicked.connect(self.delete_requested.emit)
         self.import_button.clicked.connect(self.import_requested.emit)
         self.export_button.clicked.connect(self.export_requested.emit)
         self.move_up_button.clicked.connect(self.move_up_requested.emit)
@@ -54,6 +57,7 @@ class ProfileSidebar(QWidget):
         row_one = QHBoxLayout()
         row_one.addWidget(self.add_button)
         row_one.addWidget(self.duplicate_button)
+        row_one.addWidget(self.delete_button)
         row_two = QHBoxLayout()
         row_two.addWidget(self.import_button)
         row_two.addWidget(self.export_button)
@@ -73,7 +77,7 @@ class ProfileSidebar(QWidget):
         self.list_widget.blockSignals(True)
         self.list_widget.clear()
         self.list_widget.addItems(names)
-        matches = self.list_widget.findItems(current, Qt.MatchExactly)
+        matches = self.list_widget.findItems(current, Qt.MatchFlag.MatchExactly)
         if matches:
             self.list_widget.setCurrentItem(matches[0])
         elif names:

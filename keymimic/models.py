@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 
 class ValidationError(ValueError):
@@ -22,6 +23,16 @@ def _as_int(data: dict[str, Any], key: str, default: int) -> int:
         raise ValidationError(f"{key} must be an integer") from exc
 
 
+def _as_optional_int(data: dict[str, Any], key: str) -> int | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{key} must be an integer or null") from exc
+
+
 @dataclass
 class TypingProfile:
     name: str
@@ -37,6 +48,7 @@ class TypingProfile:
     line_break_max_seconds: float
     mistake_chance: float
     is_builtin: bool = False
+    profile_id: str = field(default_factory=lambda: str(uuid4()))
 
     def validate(self) -> None:
         if not self.name.strip():
@@ -66,22 +78,20 @@ class TypingProfile:
         if self.pause_min_seconds > self.pause_max_seconds:
             raise ValidationError("Pause minimum cannot exceed pause maximum")
         if self.line_break_min_seconds > self.line_break_max_seconds:
-            raise ValidationError(
-                "Line break minimum cannot exceed line break maximum"
-            )
+            raise ValidationError("Line break minimum cannot exceed line break maximum")
+        if not self.profile_id.strip():
+            raise ValidationError("Profile ID is required")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TypingProfile":
+    def from_dict(cls, data: dict[str, Any]) -> TypingProfile:
         profile = cls(
             name=str(data.get("name", "")).strip(),
             description=str(data.get("description", "")),
             base_delay_seconds=_as_float(data, "base_delay_seconds", 0.06),
-            delay_variation_seconds=_as_float(
-                data, "delay_variation_seconds", 0.03
-            ),
+            delay_variation_seconds=_as_float(data, "delay_variation_seconds", 0.03),
             hold_time_ms=_as_int(data, "hold_time_ms", 50),
             pause_chance=_as_float(data, "pause_chance", 0.02),
             pause_min_seconds=_as_float(data, "pause_min_seconds", 0.5),
@@ -90,7 +100,9 @@ class TypingProfile:
             line_break_min_seconds=_as_float(data, "line_break_min_seconds", 3.0),
             line_break_max_seconds=_as_float(data, "line_break_max_seconds", 8.0),
             mistake_chance=_as_float(data, "mistake_chance", 0.06),
-            is_builtin=bool(data.get("is_builtin", False)),
+            is_builtin=_as_bool(data, "is_builtin", False),
+            profile_id=str(data.get("profile_id", "")).strip()
+            or str(uuid5(NAMESPACE_URL, f"keymimic-profile:{data.get('name', '')}")),
         )
         profile.validate()
         return profile
@@ -112,7 +124,7 @@ class HotkeySettings:
 
         validate_hotkey_settings(self)
 
-    def normalized(self) -> "HotkeySettings":
+    def normalized(self) -> HotkeySettings:
         from .hotkeys import normalize_hotkey
 
         return HotkeySettings(
@@ -125,7 +137,7 @@ class HotkeySettings:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "HotkeySettings":
+    def from_dict(cls, data: dict[str, Any] | None) -> HotkeySettings:
         if not data:
             settings = cls()
         else:
@@ -154,14 +166,14 @@ class WindowSettings:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "WindowSettings":
+    def from_dict(cls, data: dict[str, Any] | None) -> WindowSettings:
         if not data:
             return cls()
         return cls(
             width=max(760, _as_int(data, "width", cls.width)),
             height=max(560, _as_int(data, "height", cls.height)),
-            x=data.get("x") if data.get("x") is None else int(data.get("x")),
-            y=data.get("y") if data.get("y") is None else int(data.get("y")),
+            x=_as_optional_int(data, "x"),
+            y=_as_optional_int(data, "y"),
         )
 
 
@@ -172,45 +184,78 @@ class AppConfig:
     hotkeys: HotkeySettings = field(default_factory=HotkeySettings)
     profile_order: list[str] = field(default_factory=list)
     countdown_seconds: int = 5
+    config_version: int = 2
     enable_tooltips: bool = True
     log_level: str = "INFO"
     start_minimized: bool = False
-    minimize_to_tray: bool = True
+    show_tray_icon: bool = True
+    close_to_tray: bool = False
+    focus_guard_enabled: bool = True
+    sounds_enabled: bool = True
     window: WindowSettings = field(default_factory=WindowSettings)
+
+    def normalize(self) -> None:
+        ordered = [
+            name
+            for index, name in enumerate(self.profile_order)
+            if name in self.profiles and name not in self.profile_order[:index]
+        ]
+        ordered.extend(name for name in self.profiles if name not in ordered)
+        self.profile_order = ordered
+        self.profiles = {name: self.profiles[name] for name in ordered}
+        if self.profiles and self.last_profile not in self.profiles:
+            self.last_profile = next(iter(self.profiles))
+        self.log_level = self.log_level.upper()
+        if self.start_minimized and not self.show_tray_icon:
+            self.start_minimized = False
 
     def validate(self) -> None:
         if not self.profiles:
             raise ValidationError("At least one profile is required")
-        for profile in self.profiles.values():
+        ids: set[str] = set()
+        for key, profile in self.profiles.items():
             profile.validate()
-        ordered = [name for name in self.profile_order if name in self.profiles]
-        ordered.extend(name for name in self.profiles if name not in ordered)
-        self.profile_order = ordered
-        self.profiles = {name: self.profiles[name] for name in ordered}
+            if key != profile.name:
+                raise ValidationError(f"Profile key does not match profile name: {key}")
+            if profile.profile_id in ids:
+                raise ValidationError(f"Duplicate profile ID: {profile.profile_id}")
+            ids.add(profile.profile_id)
+        if self.profile_order != list(self.profiles):
+            raise ValidationError("Profile order does not match stored profiles")
         if self.last_profile not in self.profiles:
-            self.last_profile = next(iter(self.profiles))
+            raise ValidationError("Selected profile does not exist")
         self.hotkeys.validate()
         if not 0 <= self.countdown_seconds <= 30:
             raise ValidationError("Countdown must be between 0 and 30 seconds")
+        if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+            raise ValidationError("Unsupported log level")
+        if self.start_minimized and not self.show_tray_icon:
+            raise ValidationError("Start minimized requires the tray icon")
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "config_version": self.config_version,
             "last_profile": self.last_profile,
             "profile_order": list(self.profile_order),
             "profiles": {
-                name: profile.to_dict() for name, profile in self.profiles.items()
+                name: profile.to_dict()
+                for name, profile in self.profiles.items()
+                if not profile.is_builtin
             },
             "hotkeys": self.hotkeys.normalized().to_dict(),
             "countdown_seconds": self.countdown_seconds,
             "enable_tooltips": self.enable_tooltips,
             "log_level": self.log_level,
             "start_minimized": self.start_minimized,
-            "minimize_to_tray": self.minimize_to_tray,
+            "show_tray_icon": self.show_tray_icon,
+            "close_to_tray": self.close_to_tray,
+            "focus_guard_enabled": self.focus_guard_enabled,
+            "sounds_enabled": self.sounds_enabled,
             "window": self.window.to_dict(),
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
+    def from_dict(cls, data: dict[str, Any]) -> AppConfig:
         profiles_data = data.get("profiles") or {}
         profiles = {
             str(name): TypingProfile.from_dict(profile_data)
@@ -223,12 +268,36 @@ class AppConfig:
             profile_order=[
                 str(name) for name in data.get("profile_order", []) if str(name)
             ],
+            config_version=_as_int(data, "config_version", 2),
             countdown_seconds=_as_int(data, "countdown_seconds", 5),
-            enable_tooltips=bool(data.get("enable_tooltips", True)),
+            enable_tooltips=_as_bool(data, "enable_tooltips", True),
             log_level=str(data.get("log_level", "INFO")),
-            start_minimized=bool(data.get("start_minimized", False)),
-            minimize_to_tray=bool(data.get("minimize_to_tray", True)),
+            start_minimized=_as_bool(data, "start_minimized", False),
+            show_tray_icon=_as_bool(
+                data,
+                "show_tray_icon",
+                _as_bool(data, "minimize_to_tray", True),
+            ),
+            close_to_tray=_as_bool(data, "close_to_tray", False),
+            focus_guard_enabled=_as_bool(data, "focus_guard_enabled", True),
+            sounds_enabled=_as_bool(data, "sounds_enabled", True),
             window=WindowSettings.from_dict(data.get("window")),
         )
+        config.normalize()
         config.validate()
         return config
+
+
+def _as_bool(data: dict[str, Any], key: str, default: bool) -> bool:
+    value = data.get(key, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValidationError(f"{key} must be true or false")

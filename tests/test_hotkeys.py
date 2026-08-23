@@ -51,6 +51,17 @@ def test_stop_hotkey_is_required():
         validate_hotkey_settings(settings)
 
 
+def test_start_and_show_hotkeys_require_a_modifier():
+    settings = HotkeySettings(
+        start_pause_typing="A",
+        stop_typing="Esc",
+        show_hide_window="Ctrl+Shift+Alt+K",
+    )
+
+    with pytest.raises(HotkeyParseError):
+        validate_hotkey_settings(settings)
+
+
 @pytest.mark.skipif(platform.system() != "Windows", reason="Windows API required")
 def test_global_hotkey_manager_can_apply_empty_bindings():
     manager = GlobalHotkeyManager()
@@ -58,3 +69,15 @@ def test_global_hotkey_manager_can_apply_empty_bindings():
         assert manager.apply_bindings({}) == {}
     finally:
         manager.stop()
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="Windows API required")
+def test_global_hotkey_worker_registers_and_stops_cleanly():
+    manager = GlobalHotkeyManager()
+    try:
+        statuses = manager.apply_bindings({"test": "Ctrl+Shift+Alt+F24"})
+        assert statuses == {"test": "registered"}
+    finally:
+        manager.stop()
+
+    assert manager.bindings == {"test": "Ctrl+Shift+Alt+F24"}

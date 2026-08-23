@@ -17,9 +17,7 @@ def setup_logging(level: str = "INFO") -> Path:
     root.setLevel(numeric_level)
     root.handlers.clear()
 
-    formatter = logging.Formatter(
-        "%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
     handler = RotatingFileHandler(
         log_path,
         maxBytes=1_000_000,
@@ -34,3 +32,12 @@ def setup_logging(level: str = "INFO") -> Path:
     console.setLevel(logging.WARNING)
     root.addHandler(console)
     return log_path
+
+
+def set_log_level(level: str) -> None:
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    root = logging.getLogger()
+    root.setLevel(numeric_level)
+    for handler in root.handlers:
+        if isinstance(handler, RotatingFileHandler):
+            handler.setLevel(numeric_level)

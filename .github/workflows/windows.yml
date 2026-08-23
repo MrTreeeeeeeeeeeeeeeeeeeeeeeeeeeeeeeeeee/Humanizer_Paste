@@ -1,0 +1,22 @@
+name: Windows quality and package
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m ruff check keymimic tests
+      - run: python -m mypy keymimic
+      - run: python -m pytest --cov=keymimic --cov-report=term-missing
+      - run: python tools/generate_icon.py
+      - run: python -m PyInstaller --noconfirm --clean --distpath dist/ci KeyMimic.spec
+      - run: dist/ci/KeyMimic/KeyMimic.exe --smoke-test

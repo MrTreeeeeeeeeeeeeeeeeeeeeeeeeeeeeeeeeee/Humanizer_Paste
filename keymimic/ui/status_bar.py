@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QWidget,
 )
 
@@ -126,7 +125,6 @@ class StatusBarWidget(QWidget):
         tooltip_action: str,
         hotkey: str,
     ) -> None:
-        button.setShortcut(QKeySequence(hotkey) if hotkey else QKeySequence())
         self._set_button_text(button, action_text, hotkey)
         if hotkey:
             button.setToolTip(f"{tooltip_action}: {hotkey}")
